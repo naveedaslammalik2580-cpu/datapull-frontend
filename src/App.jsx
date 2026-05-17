@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
 
@@ -6,6 +6,19 @@ const platforms = [
   { id: "youtube", label: "YouTube Channels", icon: "▶" },
   { id: "google", label: "Google Businesses", icon: "◈" },
 ];
+
+function isEmpty(val) {
+  return val === null || val === undefined || val === "" || val === "—";
+}
+
+const COL_LABELS = {
+  video_count: "VIDEOS",
+  email:       "EMAIL",
+};
+
+function colLabel(key) {
+  return COL_LABELS[key] || key;
+}
 
 export default function App() {
   const [platform, setPlatform] = useState("youtube");
@@ -17,12 +30,26 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [searched, setSearched] = useState(false);
+  const [emailOnly, setEmailOnly] = useState(false);
+  const [noWebsiteOnly, setNoWebsiteOnly] = useState(false);
+  const [strugglingOnly, setStrugglingOnly] = useState(false);
+  const [darkMode, setDarkMode] = useState(
+    () => localStorage.getItem("theme") !== "light"
+  );
+
+  useEffect(() => {
+    document.documentElement.setAttribute("data-theme", darkMode ? "dark" : "light");
+    localStorage.setItem("theme", darkMode ? "dark" : "light");
+  }, [darkMode]);
 
   function switchPlatform(id) {
     setPlatform(id);
     setResults([]);
     setSearched(false);
     setError("");
+    setEmailOnly(false);
+    setNoWebsiteOnly(false);
+    setStrugglingOnly(false);
   }
 
   async function handleSearch() {
@@ -36,7 +63,7 @@ export default function App() {
     try {
       const url =
         platform === "youtube"
-          ? `${API_URL}/youtube/search?date_from=${dateFrom}&q=${encodeURIComponent(keyword)}${region ? `&region=${region}` : ""}`
+          ? `${API_URL}/youtube/search?date_from=${dateFrom}&q=${encodeURIComponent(keyword)}${region ? `&region=${region}` : ""}${strugglingOnly ? "&struggling_only=true" : ""}`
           : `${API_URL}/google/search?date_from=${dateFrom}&location=${encodeURIComponent(location)}`;
 
       const res = await fetch(url);
@@ -67,12 +94,27 @@ export default function App() {
     a.click();
   }
 
+  const filteredResults = results.filter((row) => {
+    if (platform === "youtube" && emailOnly && isEmpty(row.email)) return false;
+    if (platform === "google" && noWebsiteOnly && !isEmpty(row.website)) return false;
+    return true;
+  });
+
   return (
     <div className="app">
       <header>
-        <div className="logo">
-          <span className="logo-mark">⬡</span>
-          <span className="logo-text">DataPull</span>
+        <div className="header-top">
+          <div className="logo">
+            <span className="logo-mark">⬡</span>
+            <span className="logo-text">DataPull</span>
+          </div>
+          <button
+            className="theme-toggle"
+            onClick={() => setDarkMode(!darkMode)}
+            title="Toggle theme"
+          >
+            {darkMode ? "☀" : "🌙"}
+          </button>
         </div>
         <p className="tagline">New businesses & channels — extracted instantly</p>
       </header>
@@ -125,6 +167,18 @@ export default function App() {
                     <option value="AU">Australia</option>
                   </select>
                 </div>
+                <div className="filter-divider">→</div>
+                <div className="filter-group">
+                  <label>&nbsp;</label>
+                  <label className="toggle-filter" style={{ marginTop: "4px" }}>
+                    <input
+                      type="checkbox"
+                      checked={strugglingOnly}
+                      onChange={(e) => setStrugglingOnly(e.target.checked)}
+                    />
+                    <span>Struggling Channels (videos but low subscribers)</span>
+                  </label>
+                </div>
               </>
             ) : (
               <div className="filter-group">
@@ -158,32 +212,86 @@ export default function App() {
           <section className="results-section">
             <div className="results-header">
               <h2>
-                {results.length > 0
-                  ? `${results.length} results found`
+                {filteredResults.length > 0
+                  ? `${filteredResults.length} results found`
                   : "No results found"}
               </h2>
-              {results.length > 0 && (
-                <button className="export-btn" onClick={exportCSV}>
-                  Export CSV
-                </button>
-              )}
+              <div className="results-actions">
+                {platform === "youtube" && results.length > 0 && (
+                  <label className="toggle-filter">
+                    <input
+                      type="checkbox"
+                      checked={emailOnly}
+                      onChange={(e) => setEmailOnly(e.target.checked)}
+                    />
+                    <span>Channels with email only</span>
+                  </label>
+                )}
+                {platform === "google" && results.length > 0 && (
+                  <label className="toggle-filter">
+                    <input
+                      type="checkbox"
+                      checked={noWebsiteOnly}
+                      onChange={(e) => setNoWebsiteOnly(e.target.checked)}
+                    />
+                    <span>No website only</span>
+                  </label>
+                )}
+                {results.length > 0 && (
+                  <button className="export-btn" onClick={exportCSV}>
+                    Export CSV
+                  </button>
+                )}
+              </div>
             </div>
 
-            {results.length > 0 && (
+            {filteredResults.length > 0 && (
               <div className="table-wrapper">
                 <table>
                   <thead>
                     <tr>
-                      {Object.keys(results[0]).map((key) => (
-                        <th key={key}>{key}</th>
+                      {Object.keys(filteredResults[0]).map((key) => (
+                        <th key={key}>{colLabel(key)}</th>
                       ))}
                     </tr>
                   </thead>
                   <tbody>
-                    {results.map((row, i) => (
+                    {filteredResults.map((row, i) => (
                       <tr key={i}>
-                        {Object.values(row).map((val, j) => (
-                          <td key={j}>{val || "—"}</td>
+                        {Object.keys(row).map((key, j) => (
+                          <td key={j}>
+                            {platform === "youtube" && key === "name" && row.channel_url ? (
+                              <a
+                                href={row.channel_url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="channel-link"
+                              >
+                                {row[key] || "—"}
+                              </a>
+                            ) : platform === "google" && key === "email" ? (
+                              row.email ? (
+                                row.email
+                              ) : !row.website ? (
+                                <span className="social-links">
+                                  <a
+                                    href={`https://www.facebook.com/search/top?q=${encodeURIComponent(row.name)}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="social-btn social-fb"
+                                  >🔵 Facebook</a>
+                                  <a
+                                    href={`https://www.instagram.com/explore/search/?q=${encodeURIComponent(row.name)}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="social-btn social-ig"
+                                  >📷 Instagram</a>
+                                </span>
+                              ) : "—"
+                            ) : (
+                              row[key] || "—"
+                            )}
+                          </td>
                         ))}
                       </tr>
                     ))}
