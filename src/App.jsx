@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 
-const API_URL = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
+const API_URL = import.meta.env.VITE_API_URL || "https://datapull-backend-production.up.railway.app";
 
 const platforms = [
   { id: "youtube", label: "YouTube Channels", icon: "▶" },
@@ -23,6 +23,7 @@ function colLabel(key) {
 export default function App() {
   const [platform, setPlatform] = useState("youtube");
   const [dateFrom, setDateFrom] = useState("");
+  const [dateTo,   setDateTo]   = useState("");
   const [keyword, setKeyword] = useState("");
   const [region, setRegion] = useState("");
   const [location, setLocation] = useState("Pakistan");
@@ -47,6 +48,7 @@ export default function App() {
     setResults([]);
     setSearched(false);
     setError("");
+    setDateTo("");
     setEmailOnly(false);
     setNoWebsiteOnly(false);
     setStrugglingOnly(false);
@@ -63,7 +65,7 @@ export default function App() {
     try {
       const url =
         platform === "youtube"
-          ? `${API_URL}/youtube/search?date_from=${dateFrom}&q=${encodeURIComponent(keyword)}${region ? `&region=${region}` : ""}${strugglingOnly ? "&struggling_only=true" : ""}`
+          ? `${API_URL}/youtube/search?date_from=${dateFrom}${dateTo ? `&date_to=${dateTo}` : ""}&q=${encodeURIComponent(keyword)}${region ? `&region=${region}` : ""}${strugglingOnly ? "&struggling_only=true" : ""}`
           : `${API_URL}/google/search?date_from=${dateFrom}&location=${encodeURIComponent(location)}`;
 
       const res = await fetch(url);
@@ -82,7 +84,7 @@ export default function App() {
     const headers = Object.keys(results[0]).join(",");
     const rows = results.map((r) =>
       Object.values(r)
-        .map((v) => `"${v}"`)
+        .map((v) => `"${String(v ?? "").replace(/"/g, '""')}"`)
         .join(",")
     );
     const csv = [headers, ...rows].join("\n");
@@ -141,6 +143,16 @@ export default function App() {
                 type="date"
                 value={dateFrom}
                 onChange={(e) => setDateFrom(e.target.value)}
+              />
+            </div>
+            <div className="filter-divider">→</div>
+            <div className="filter-group">
+              <label>Date to</label>
+              <input
+                type="date"
+                value={dateTo}
+                min={dateFrom || undefined}
+                onChange={(e) => setDateTo(e.target.value)}
               />
             </div>
             <div className="filter-divider">→</div>
